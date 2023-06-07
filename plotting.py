@@ -1,13 +1,14 @@
 
 # Import Necessary Functions
-import datetime as dt
 from dateutil.relativedelta import *
 import logging
 import pandas as pd
 import matplotlib.dates as md
 import matplotlib.pyplot as plt
-import numpy as np
-from utils import *
+try:
+    from .utils import *
+except:
+    from utils import *
 
 
 # Plotting Functions
@@ -16,7 +17,7 @@ from utils import *
 #
 # @ param dataFrame - pandas dataframe with the data to plot from get_data function in the FMDB.py script
 #
-def plot_lines(dataFrame):
+def _plot_lines(dataFrame, force=False):
     # Quit plotting if no data is available
     if len(dataFrame.head(1)["date"]) < 1:
         print("dataFrame has no data")
@@ -27,7 +28,7 @@ def plot_lines(dataFrame):
     mids = df.index
     # Dropping one level from multi index (date) and find all the unique combinations of the other levels
     combos = mids.droplevel('date').unique()
-    if len(combos) < 50:
+    if len(combos) < 20 or force:
         fig, ax = plt.subplots(figsize=(14,9))
         plt.subplots_adjust(top=.9, bottom=0.15)
         legend = []
@@ -49,21 +50,21 @@ def plot_lines(dataFrame):
         plt.legend(legend,loc='upper left')
         plt.show()
     else:
-        logging.error('Too many plots. Consider filtering data using get_data parameters.')
+        logging.error('Too many stations. Consider filtering data using get_data parameters.')
         
         
 # Standard deviation plot for each fuelType/fuelVariation (averaging all sites)
 #
 # @ param dataFrame - pandas dataframe with the data to plot from get_data function in the FMDB.py script
 #
-def plot_lines_mean(dataFrame):
+def _plot_lines_mean(dataFrame):
     # Quit plotting if no data is available
     if len(dataFrame.head(1)["date"]) < 1:
         print("dataFrame has no data")
         return
     dataFrame['fuel_type'] = dataFrame['fuel_type'].fillna('None').str.lower()
     dataFrame['fuel_variation'] = dataFrame['fuel_variation'].fillna('None').str.lower()
-    df = dataFrame.groupby(['fuel_type','fuel_variation',dataFrame.date.dt.year, dataFrame.date.dt.month]).agg(['mean','std'])
+    df = dataFrame.groupby(['fuel_type','fuel_variation',dataFrame.date.dt.year, dataFrame.date.dt.month]).agg({'percent': ['mean','std']})
     df.index.names = ['fuel_type','fuel_variation','year','month']
     mid = df.index
     year_combos = mid.droplevel('month').unique()
@@ -101,7 +102,7 @@ def plot_lines_mean(dataFrame):
 # @ param dataFrame - pandas dataframe with the data to plot from get_data function in the FMDB.py script
 # @ param monthly - boolean to change from yearly to monthly bars
 #
-def plot_bars_mean(dataFrame, monthly=False):
+def _plot_bars_mean(dataFrame, monthly=False):
     # Quit plotting if no data is available
     if len(dataFrame.head(1)["date"]) < 1:
         print("dataFrame has no data")
@@ -109,12 +110,12 @@ def plot_bars_mean(dataFrame, monthly=False):
     dataFrame['fuel_type'] = dataFrame['fuel_type'].fillna('None').str.lower()
     dataFrame['fuel_variation'] = dataFrame['fuel_variation'].fillna('None').str.lower()
     if monthly:
-        df = dataFrame.groupby([dataFrame.date.dt.year,dataFrame.date.dt.month]).agg(['mean','std'])
+        df = dataFrame.groupby([dataFrame.date.dt.year,dataFrame.date.dt.month]).agg({'percent': ['mean','std']})
         df.index.names = ['year','month']
         dates = pd.to_datetime(['{:04d}-{:02d}'.format(y,m) for y,m in df.index.to_numpy()])
         width = len(dates)*.1
     else:
-        df = dataFrame.groupby([dataFrame.date.dt.year],dropna=False).agg(['mean','std'])
+        df = dataFrame.groupby([dataFrame.date.dt.year],dropna=False).agg({'percent': ['mean','std']})
         df.index.names = ['year']
         dates = pd.to_datetime(['{:04d}-01'.format(y) for y in df.index.to_numpy()])
         width = len(dates)*52*.2
@@ -141,7 +142,7 @@ def plot_bars_mean(dataFrame, monthly=False):
 #
 # @param dataFrame - pandas dataframe with the data to plot from get_data function in the FMDB.py script
 #
-def plot_yearly_obs(dataFrame):
+def _plot_yearly_obs(dataFrame):
     # Quit plotting if no data is available
     if len(dataFrame.head(1)["date"]) < 1:
         print("dataFrame has no data")
@@ -168,7 +169,7 @@ def plot_yearly_obs(dataFrame):
 #
 # @param dataFrame - pandas dataframe with the data to plot from get_data function in the FMDB.py script
 #
-def plot_fuel_types(dataFrame):
+def _plot_fuel_types(dataFrame):
     # Quit plotting if no data is available
     if len(dataFrame.head(1)["date"]) < 1:
         print("dataFrame has no data")
@@ -190,9 +191,12 @@ def plot_fuel_types(dataFrame):
     plt.yticks(fontsize=15)
     ax.set_xlabel("Vegetation Types",fontsize=20)
     ax.set_ylabel("Number of Observations",fontsize=20)
-    #for label in ax.yaxis.get_majorticklabels():
-    #    label.set_fontsize(15)
-    #for label in ax.xaxis.get_majorticklabels():
-    #    label.set_fontsize(15)  
     plt.title(f"Fuel Type Sampling Observations from {min(dataFrame.date.dt.year.unique())} - {max(dataFrame.date.dt.year.unique())}",fontsize=25)
     plt.show()
+
+# Map plot that shows location of stations and the dominant fuel types with total number of observations
+#
+# @param dataFrame - pandas dataframe with the data to plot from get_data function in the FMDB.py script
+#
+def _plot_map(dataFrame):
+    pass

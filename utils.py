@@ -17,14 +17,14 @@ _GACCS = ['AICC', 'EACC', 'EGBC', 'NICC', 'NOCC', 'NRCC', 'NRCC',
 #
 # @ Param gacc - gacc to construct the URL for
 #
-def gaccURL(gacc, **kargs):
+def gacc_url(gacc, **kargs):
     return BASE_URLS['gacc_sites'].format(gacc)
 
 # Construct State URL
 #
 # @ Param state - state to construct the URL for
 #
-def stateURL(state, **kargs):
+def state_url(state, **kargs):
     return BASE_URLS['state_sites'].format(state)
 
 # Construct Site URL
@@ -34,7 +34,7 @@ def stateURL(state, **kargs):
 # @ Param state - state to construct the URL for
 # @ Param grup - grup to construct the URL for
 #
-def siteURL(site, gacc, state, grup, **kargs):
+def site_url(site, gacc, state, grup, **kargs):
     return BASE_URLS['site_data'].format(site,gacc,state,grup)
 
 # Request page with retrying using requests package
@@ -42,7 +42,7 @@ def siteURL(site, gacc, state, grup, **kargs):
 # @ Param url - URL to get the page from
 # @ Param max_retries - maximum number of retries
 #
-def getURL(url, max_retries=10):
+def get_url(url, max_retries=10):
     while max_retries:
         try:
             page = requests.get(url)

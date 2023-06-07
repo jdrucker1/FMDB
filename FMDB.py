@@ -12,14 +12,17 @@ import numpy as np
 import os.path as osp
 import os
 import pandas as pd
-import plotting as fmplt
 import sys
 try:
-    from .utils import _GACCS
-    from .utils import *
+    from .utils import _GACCS, gacc_url, state_url, site_url, get_url, \
+        split_fuel, check_coords, filter_outliers
+    from .plotting import _plot_bars_mean, _plot_fuel_types, \
+        _plot_lines, _plot_lines_mean, _plot_yearly_obs
 except:
-    from utils import _GACCS
-    from utils import *
+    from utils import _GACCS, gacc_url, state_url, site_url, get_url, \
+        split_fuel, check_coords, filter_outliers
+    from plotting import _plot_bars_mean, _plot_fuel_types, \
+        _plot_lines, _plot_lines_mean, _plot_yearly_obs
 
 pd.set_option('display.max_colwidth', None)
 
@@ -79,7 +82,7 @@ class FMDB(object):
             lenNew = len(df_new)
             df_new.index = range(lenLocal,lenLocal+lenNew)
             df_new.index.name = 'site_number'
-            df_local = df_local.append(df_new)
+            df_local = pd.concat((df_local,df_new))
             if lenNew:
                 self.new_stations = True
                 logging.info('New {} stations added'.format(lenNew))
@@ -97,15 +100,15 @@ class FMDB(object):
     #
     def update_gacc_stations(self, gacc="NOCC"):
         # Get site list from NFMD for a specific state
-        url = gaccURL(gacc)
+        url = gacc_url(gacc)
         # read page
-        page = getURL(url)
+        page = get_url(url)
         # Find the total number of stations 
         tree = etree.fromstring(page.content)
         stations = []
         for site in tree:
             attribs = dict(site.attrib)
-            attribs.update({'url': siteURL(**attribs)})
+            attribs.update({'url': site_url(**attribs)})
             stations.append(attribs)
 
         df = pd.DataFrame(stations)
@@ -122,15 +125,15 @@ class FMDB(object):
     #
     def update_state_stations(self, state="CA"):
         # Get site list from NFMD for a specific state
-        url = stateURL(state)
+        url = state_url(state)
         # read page
-        page = getURL(url)
+        page = get_url(url)
         # Find the total number of stations 
         tree = etree.fromstring(page.content)
         stations = []
         for site in tree:
             attribs = dict(site.attrib)
-            attribs.update({'url': siteURL(**attribs)})
+            attribs.update({'url': site_url(**attribs)})
             stations.append(attribs)
 
         df = pd.DataFrame(stations)
@@ -165,7 +168,7 @@ class FMDB(object):
                     logging.info('Updating station {}/{}'.format(ns+1,nStations))
                     logging.debug('{}'.format(url))
                     # downloads site data file
-                    page = getURL(url)
+                    page = get_url(url)
                     # Read downloaded file for identifying the station
                     # For example: https://www.wfas.net/nfmd/public/download_site_data.php?site=12%20Rd%20@%2054%20Rd&gacc=NOCC&state=CA&grup=Tahoe%20NF
                     # I.E. from above: site = 12 Rd @ 54, gacc = NOCC, etc.
@@ -175,7 +178,7 @@ class FMDB(object):
                         logging.warning('url {} has not data'.format(url))
                         continue
                     df.columns = [c.lower() for c in df.columns]
-                    df = df[["date", "state", "fuel", "percent"]]
+                    df = df[["date", "fuel", "percent"]]
                     df.loc[:,'date'] = pd.to_datetime(df.loc[:,'date'])
                     df.loc[:,'year'] = df.date.dt.year.astype(int)
                     # Loop to every year in the data
@@ -187,7 +190,7 @@ class FMDB(object):
                             group = pd.concat((group, split),axis=1)
                             if osp.exists(year_path):
                                 df_local = pd.read_pickle(year_path)
-                                group = pd.concat([df_local, group]).drop_duplicates(subset=['date', 'state', 'fuel','percent','site_number'],keep="first")
+                                group = pd.concat([df_local, group]).drop_duplicates(subset=['date','fuel','percent','site_number'],keep="first")
                             group.reset_index(drop=True).to_pickle(year_path)
                 self.updated_dt = datetime.datetime.now()
                 self.last_updated = self.updated_dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -284,14 +287,14 @@ class FMDB(object):
                             fltr = np.logical_and(fltr,yearDataFrame.fuel_type.str.lower().isin(fuelTypes))
                         if fuelVariation != None:
                             fltr = np.logical_and(fltr,yearDataFrame.fuel_variation.str.lower().str.contains('|'.join(fuelVariations),na=False))
-                    data = data.append(yearDataFrame[fltr])
+                    data = pd.concat((data,yearDataFrame[fltr]))
                 # If data file does not exist (i.e. you have data files from 2000-2021 but you call 1999)
                 else:
                     logging.warning("{} does not exist. Try updating the DB before getting data using update_all or update_data.".format(year_path))
                 startYear += 1
             logging.info('{} records found'.format(len(data)))
             if len(data):
-                data = data[['site_number','date', 'state','fuel_type','fuel_variation','percent']]
+                data = data[['site_number','date','fuel_type','fuel_variation','percent']]
                 data = data.sort_values(by=list(data.columns))
             if makeFile:
                 sites = self.sites()
@@ -316,24 +319,24 @@ class FMDB(object):
     # @ param dataFrame - pandas dataframe with the data to plot from get_data
     # @ param outliers - boolean to include or not the outliers (points outside of [0,400] range)
     #
-    def plot_lines(self,dataFrame,outliers=False):
+    def plot_lines(self, dataFrame=None, outliers=False):
         if dataFrame is None:
             dataFrame = self.get_data()
         if not outliers:
             dataFrame = filter_outliers(dataFrame)
-        fmplt.plot_lines(dataFrame)
+        _plot_lines(dataFrame)
 
     # Standard deviation plot for each fuelType/fuelVariation (averaging all sites)
     #
     # @ param dataFrame - pandas dataframe with the data to plot from get_data function in the FMDB.py script
     # @ param outliers - boolean to include or not the outliers (points outside of [0,400] range)
     #
-    def plot_lines_mean(self,dataFrame,outliers=False):
+    def plot_lines_mean(self,dataFrame=None,outliers=False):
         if dataFrame is None:
             dataFrame = self.get_data()
         if not outliers:
             dataFrame = filter_outliers(dataFrame)
-        fmplt.plot_lines_mean(dataFrame)
+        _plot_lines_mean(dataFrame)
         
     # Bar plot that shows mean and standard devaition values for all the data each year unless monthly paramter is set to True.
     #
@@ -341,36 +344,36 @@ class FMDB(object):
     # @ param monthly - boolean to change from yearly to monthly bars
     # @ param outliers - boolean to include or not the outliers (points outside of [0,400] range)
     #
-    def plot_bars_mean(self,dataFrame,monthly=False,outliers=False):
+    def plot_bars_mean(self, dataFrame=None, monthly=False, outliers=False):
         if dataFrame is None:
             dataFrame = self.get_data()
         if not outliers:
             dataFrame = filter_outliers(dataFrame)
-        fmplt.plot_bars_mean(dataFrame,monthly)
+        _plot_bars_mean(dataFrame,monthly)
 
     # Bar plot that shows the number of observations over each year found in the dataFrame
     #
     # @ param dataFrame - pandas dataframe with the data to plot from get_data
     # @ param outliers - boolean to include or not the outliers (points outside of [0,400] range)
     #
-    def plot_yearly_obs(self,dataFrame=None,outliers=False):
+    def plot_yearly_obs(self, dataFrame=None, outliers=False):
         if dataFrame is None:
             dataFrame = self.get_data()
         if not outliers:
             dataFrame = filter_outliers(dataFrame)
-        fmplt.plot_yearly_obs(dataFrame)
+        _plot_yearly_obs(dataFrame)
         
     # Bar plot that shows the fuel types and number of observations of each fuel type found in the dataFrame
     #
     # @ param dataFrame - pandas dataframe with the data to plot from get_data
     # @ param outliers - boolean to include or not the outliers (points outside of [0,400] range)
     #
-    def plot_fuel_types(self,dataFrame,outliers=False):
+    def plot_fuel_types(self, dataFrame=None, outliers=False):
         if dataFrame is None:
             dataFrame = self.get_data()
         if not outliers:
             dataFrame = filter_outliers(dataFrame)
-        fmplt.plot_fuel_types(dataFrame)
+        _plot_fuel_types(dataFrame)
 
 if __name__ == '__main__':
     import time
